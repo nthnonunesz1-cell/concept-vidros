@@ -13,7 +13,9 @@ import { graficoMensal, resumoMensal, barrasHorizontais, ligarDicas } from '../g
 
 let mes = mesAtual();
 let aba = 'lancamentos';
-const filtros = { tipo: '', status: '', busca: '' };
+// lista: 'todos', 'receita', 'despesa' ou 'pendente'
+const filtros = { lista: 'todos', busca: '' };
+const FILTROS_LANC = [['todos', 'Todos'], ['receita', 'Receitas'], ['despesa', 'Despesas'], ['pendente', 'Pendentes']];
 let raiz = null;
 
 const noMes = (l, m = mes) => String(l.data || '').startsWith(m);
@@ -54,12 +56,12 @@ export default {
         <button type="button" class="btn-icone" id="mes-anterior" aria-label="Mês anterior">${icone('voltar')}</button>
         <h2 id="mes-nome" aria-live="polite"></h2>
         <button type="button" class="btn-icone" id="mes-proximo" aria-label="Próximo mês">${icone('avancar')}</button>
-        <button type="button" class="btn btn-pequeno" id="mes-hoje">Mês atual</button>
+        <button type="button" class="btn btn-pequeno" id="mes-hoje">Voltar para este mês</button>
       </div>
-      <div class="grade-kpi" id="kpis-fin"></div>
+      <div class="grade-kpi grade-kpi-3" id="kpis-fin"></div>
       <div class="segmentado abas" role="tablist" aria-label="Seções do financeiro">
         ${[['lancamentos', 'Lançamentos'], ['receber', 'A receber'], ['pagar', 'A pagar'], ['relatorios', 'Relatórios']]
-          .map(([id, t]) => `<button type="button" role="tab" data-aba="${id}" aria-selected="${aba === id}">${t}</button>`).join('')}
+          .map(([id, t]) => `<button type="button" role="tab" data-aba="${id}" aria-selected="${aba === id}">${t}<span class="aba-n" data-aba-n="${id}"></span></button>`).join('')}
       </div>
       <div id="area-fin"></div>`;
 
@@ -79,11 +81,14 @@ export default {
     raiz.addEventListener('input', e => {
       if (e.target.id === 'busca-lanc') { filtros.busca = e.target.value; this.desenharLista(); }
     });
-    raiz.addEventListener('change', e => {
-      if (e.target.id === 'filtro-tipo') { filtros.tipo = e.target.value; this.desenharLista(); }
-      if (e.target.id === 'filtro-status') { filtros.status = e.target.value; this.desenharLista(); }
-    });
     raiz.addEventListener('click', e => {
+      const f = e.target.closest('[data-filtro-lanc]');
+      if (f) {
+        filtros.lista = f.dataset.filtroLanc;
+        $$('[data-filtro-lanc]', raiz).forEach(x => x.setAttribute('aria-pressed', String(x === f)));
+        this.desenharLista();
+        return;
+      }
       const b = e.target.closest('[data-l]');
       if (b) {
         e.stopPropagation();
@@ -98,10 +103,14 @@ export default {
       if (rec) { e.stopPropagation(); abrirPagamento(rec.dataset.receber); return; }
       const os = e.target.closest('[data-abrir-os]');
       if (os) { abrirServico(os.dataset.abrirOs); return; }
-      if (e.target.closest('#exportar-csv')) exportarCsv();
+      if (e.target.closest('#exportar-csv')) { exportarCsv(); return; }
+      const ed = e.target.closest('[data-editar-lanc]');
+      if (ed) abrirFormLancamento(ed.dataset.editarLanc);
     });
     raiz.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && e.target.matches('[data-abrir-os]')) abrirServico(e.target.dataset.abrirOs);
+      if (e.key !== 'Enter') return;
+      if (e.target.matches('[data-abrir-os]')) abrirServico(e.target.dataset.abrirOs);
+      else if (e.target.matches('[data-editar-lanc]')) abrirFormLancamento(e.target.dataset.editarLanc);
     });
 
     this.atualizar();
@@ -111,6 +120,7 @@ export default {
     if (!raiz || !document.contains(raiz)) return;
     $('#mes-nome').textContent = nomeMes(mes);
     $('#mes-proximo').disabled = mes >= somarMeses(mesAtual(), 12);
+    $('#mes-hoje').hidden = mes === mesAtual();
 
     if (!carregou('lancamentos')) { raiz.innerHTML = carregandoHtml('Carregando financeiro…'); return; }
 
@@ -122,23 +132,20 @@ export default {
     $('#kpis-fin').innerHTML = `
       <div class="kpi"><span class="kpi-rotulo">Entrou em ${esc(nomeMes(mes, false))}</span><strong class="kpi-valor texto-ok">${moeda(entrou)}</strong></div>
       <div class="kpi"><span class="kpi-rotulo">Saiu em ${esc(nomeMes(mes, false))}</span><strong class="kpi-valor texto-perigo">${moeda(saiu)}</strong></div>
-      <div class="kpi"><span class="kpi-rotulo">Resultado do mês</span><strong class="kpi-valor ${entrou - saiu < 0 ? 'texto-perigo' : ''}">${moeda(entrou - saiu)}</strong></div>
-      <div class="kpi"><span class="kpi-rotulo">A receber (total)</span><strong class="kpi-valor">${moeda(g.aReceber)}</strong>
-        <span class="kpi-sub">${g.saldoServicos ? `${moeda(g.saldoServicos)} de serviços` : 'Nada pendente de serviços'}</span></div>
-      <div class="kpi ${g.vencidas.length ? 'kpi-alerta' : ''}"><span class="kpi-rotulo">A pagar (total)</span><strong class="kpi-valor">${moeda(g.aPagar)}</strong>
-        <span class="kpi-sub">${g.vencidas.length ? `${g.vencidas.length} ${g.vencidas.length === 1 ? 'conta vencida' : 'contas vencidas'}` : 'Nenhuma vencida'}</span></div>`;
+      <div class="kpi"><span class="kpi-rotulo">Sobrou no mês</span><strong class="kpi-valor ${entrou - saiu < 0 ? 'texto-perigo' : ''}">${moeda(entrou - saiu)}</strong></div>`;
+
+    // totais "a receber" e "a pagar" aparecem nas próprias abas
+    const n = (id, txt, alerta = false) => { const e = $(`[data-aba-n="${id}"]`); if (e) { e.textContent = txt; e.classList.toggle('aba-alerta', alerta); } };
+    n('receber', g.aReceber ? ` ${moeda(g.aReceber)}` : '');
+    n('pagar', g.aPagar ? ` ${moeda(g.aPagar)}` : '', g.vencidas.length > 0);
 
     if (aba === 'lancamentos') {
       raiz.innerHTML = `<div class="barra-ferramentas">
           <label class="busca">${icone('busca')}<span class="sr">Buscar lançamento</span>
             <input id="busca-lanc" type="search" placeholder="Descrição, categoria ou cliente" value="${esc(filtros.busca)}" autocomplete="off"></label>
-          <label class="seletor-inline"><span>Tipo</span><select id="filtro-tipo">
-            <option value="">Todos</option><option value="receita" ${filtros.tipo === 'receita' ? 'selected' : ''}>Receitas</option><option value="despesa" ${filtros.tipo === 'despesa' ? 'selected' : ''}>Despesas</option>
-          </select></label>
-          <label class="seletor-inline"><span>Situação</span><select id="filtro-status">
-            <option value="">Todas</option><option value="pago" ${filtros.status === 'pago' ? 'selected' : ''}>Pago</option><option value="pendente" ${filtros.status === 'pendente' ? 'selected' : ''}>Pendente</option>
-          </select></label>
-          <button type="button" class="btn" id="exportar-csv">${icone('baixar')} Exportar planilha</button>
+        </div>
+        <div class="chips" role="group" aria-label="Filtrar lançamentos">
+          ${FILTROS_LANC.map(([id, t]) => `<button type="button" class="chip" data-filtro-lanc="${id}" aria-pressed="${filtros.lista === id}">${t}</button>`).join('')}
         </div>
         <div id="lista-lanc"></div>`;
       this.desenharLista();
@@ -155,13 +162,13 @@ export default {
     const caixa = $('#lista-lanc');
     if (!caixa) return;
     let lista = estado.lancamentos.filter(l => noMes(l));
-    if (filtros.tipo) lista = lista.filter(l => l.tipo === filtros.tipo);
-    if (filtros.status) lista = lista.filter(l => l.status === filtros.status);
+    if (filtros.lista === 'receita' || filtros.lista === 'despesa') lista = lista.filter(l => l.tipo === filtros.lista);
+    if (filtros.lista === 'pendente') lista = lista.filter(l => l.status === 'pendente');
     const t = filtros.busca.trim();
     if (t) lista = lista.filter(l => contem(`${l.descricao} ${l.categoria} ${l.clienteNome} ${l.forma} ${l.obs}`, t));
     lista.sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.criadoEm).localeCompare(String(a.criadoEm)));
     if (!lista.length) {
-      caixa.innerHTML = vazio(`Nenhum lançamento em ${nomeMes(mes)}${t || filtros.tipo || filtros.status ? ' com esses filtros' : ''}.`);
+      caixa.innerHTML = vazio(`Nenhum lançamento em ${nomeMes(mes)}${t || filtros.lista !== 'todos' ? ' com esse filtro' : ''}.`);
       return;
     }
     const rec = soma(lista.filter(l => l.tipo === 'receita'));
@@ -174,6 +181,7 @@ export default {
         <span>${lista.length} ${lista.length === 1 ? 'lançamento' : 'lançamentos'}</span>
         <span>Receitas <strong class="texto-ok">${moeda(rec)}</strong></span>
         <span>Despesas <strong class="texto-perigo">${moeda(desp)}</strong></span>
+        <button type="button" class="link" id="exportar-csv">${icone('baixar')} Exportar planilha</button>
       </div>`;
   },
 };
@@ -187,7 +195,7 @@ function etiquetaSituacao(l) {
 
 function linhaLancamento(l) {
   const sub = [l.categoria, l.clienteNome].filter(Boolean).join(', ');
-  return `<div class="linha ${l.tipo}">
+  return `<div class="linha ${l.tipo}" data-editar-lanc="${l.id}" tabindex="0">
       <div class="c-data">${dataCurta(l.data)}</div>
       <div class="c-principal"><div><strong>${esc(l.descricao)}</strong><span>${esc(sub)}${l.servicoId && buscar('servicos', l.servicoId) ? ` <button type="button" class="link" data-abrir-os="${l.servicoId}">ver serviço</button>` : ''}</span></div></div>
       <div class="c-info texto-suave" data-rotulo="Forma">${esc(l.forma || '–')}</div>
@@ -195,8 +203,6 @@ function linhaLancamento(l) {
       <div class="c-valor ${l.tipo === 'receita' ? 'texto-ok' : 'texto-perigo'}">${l.tipo === 'receita' ? '+' : '−'} ${moeda(l.valor)}</div>
       <div class="c-acoes">
         ${l.status === 'pendente' ? `<button type="button" class="btn btn-pequeno" data-l="pagar" data-id="${l.id}">${icone('check')}<span>${l.tipo === 'receita' ? 'Recebido' : 'Pago'}</span></button>` : ''}
-        <button type="button" class="btn-icone" data-l="editar" data-id="${l.id}" aria-label="Editar">${icone('editar')}</button>
-        <button type="button" class="btn-icone" data-l="excluir" data-id="${l.id}" aria-label="Excluir">${icone('lixeira')}</button>
       </div>
     </div>`;
 }
@@ -299,9 +305,9 @@ function exportarCsv() {
 
 async function excluir(l) {
   const ok = await confirmar(`Excluir "${l.descricao}" (${moeda(l.valor)})?${l.servicoId ? ' O pagamento também sai do serviço.' : ''}`, { titulo: 'Excluir lançamento', sim: 'Excluir', perigo: true });
-  if (!ok) return;
-  try { await acoes.excluirLancamento(l); toast('Lançamento excluído'); }
-  catch (e) { toast(mensagemErro(e), 'erro'); }
+  if (!ok) return false;
+  try { await acoes.excluirLancamento(l); toast('Lançamento excluído'); return true; }
+  catch (e) { toast(mensagemErro(e), 'erro'); return false; }
 }
 
 function abrirMarcarPago(l) {
@@ -347,16 +353,25 @@ export function abrirFormLancamento(id = null, tipoInicial = 'receita') {
         ${campo({ rotulo: 'Valor (R$)', nome: 'valor', obrigatorio: true, valor: numCampo(v('valor')), attrs: ATTR_DECIMAL })}
         ${campo({ rotulo: 'Categoria', nome: 'categoria', tipo: 'select', opcoes: opcoesCat(tipo), valor: v('categoria') })}
         ${campo({ rotulo: 'Situação', nome: 'status', tipo: 'select', opcoes: [['pago', 'Pago / recebido'], ['pendente', 'Pendente (a vencer)']], valor: v('status') || 'pago' })}
-        ${campo({ rotulo: 'Data', nome: 'data', tipo: 'date', valor: v('data') || hoje(), obrigatorio: true, dica: 'Data do pagamento, ou do vencimento se estiver pendente.' })}
-        ${campo({ rotulo: 'Forma de pagamento', nome: 'forma', tipo: 'select', opcoes: [['', 'Não informada'], ...FORMAS_PAGAMENTO], valor: v('forma') })}
-        ${campo({ rotulo: 'Cliente / fornecedor', nome: 'clienteNome', valor: v('clienteNome') })}
-        ${!l ? campo({ rotulo: 'Repetir todo mês', nome: 'repetir', tipo: 'select', opcoes: [['1', 'Não repetir'], ...[2, 3, 4, 6, 12].map(n => [String(n), `Por ${n} meses`])], dica: 'Bom para aluguel, salários e contas fixas. As próximas ficam pendentes.' }) : ''}
-        ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro' })}
+        ${campo({ rotulo: 'Data', nome: 'data', tipo: 'date', valor: v('data') || hoje(), obrigatorio: true, dica: 'Se estiver pendente, use a data do vencimento.' })}
+        <details class="inteiro mais-opcoes" ${l && (l.forma || l.clienteNome || l.obs) ? 'open' : ''}>
+          <summary>Mais opções</summary>
+          <div class="form-grade">
+            ${campo({ rotulo: 'Forma de pagamento', nome: 'forma', tipo: 'select', opcoes: [['', 'Não informada'], ...FORMAS_PAGAMENTO], valor: v('forma') })}
+            ${campo({ rotulo: 'Cliente / fornecedor', nome: 'clienteNome', valor: v('clienteNome') })}
+            ${!l ? campo({ rotulo: 'Repetir todo mês', nome: 'repetir', tipo: 'select', opcoes: [['1', 'Não repetir'], ...[2, 3, 4, 6, 12].map(n => [String(n), `Por ${n} meses`])], classe: 'inteiro', dica: 'Para aluguel, salários e contas fixas. As próximas ficam pendentes.' }) : ''}
+            ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro' })}
+          </div>
+        </details>
       </form>`,
-    rodape: `<button type="button" class="btn" data-fechar>Cancelar</button>
+    rodape: `${l ? `<button type="button" class="btn btn-perigo-texto" data-excluir-lanc>${icone('lixeira')}<span>Excluir</span></button><span class="espaco"></span>` : ''}
+             <button type="button" class="btn" data-fechar>Cancelar</button>
              <button type="submit" form="form-lanc" class="btn btn-primario">${l ? 'Salvar alterações' : 'Lançar'}</button>`,
     aoMontar(m) {
       const form = $('#form-lanc', m.el);
+      $('[data-excluir-lanc]', m.el)?.addEventListener('click', async () => {
+        if (await excluir(l)) m.fechar();
+      });
       form.addEventListener('change', e => {
         if (e.target.name !== 'tipo') return;
         tipo = e.target.value;

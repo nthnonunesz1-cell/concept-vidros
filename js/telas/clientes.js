@@ -42,15 +42,7 @@ export default {
         <label class="busca">
           ${icone('busca')}
           <span class="sr">Buscar cliente</span>
-          <input id="busca-clientes" type="search" placeholder="Nome, telefone, bairro ou CPF/CNPJ" value="${esc(filtros.busca)}" autocomplete="off">
-        </label>
-        <label class="seletor-inline">
-          <span>Ordenar</span>
-          <select id="ordem-clientes">
-            <option value="nome" ${filtros.ordem === 'nome' ? 'selected' : ''}>Nome</option>
-            <option value="recentes" ${filtros.ordem === 'recentes' ? 'selected' : ''}>Serviço mais recente</option>
-            <option value="saldo" ${filtros.ordem === 'saldo' ? 'selected' : ''}>Falta receber</option>
-          </select>
+          <input id="busca-clientes" type="search" placeholder="Nome, telefone ou bairro" value="${esc(filtros.busca)}" autocomplete="off">
         </label>
       </div>
       <p class="contagem" id="contagem-clientes"></p>
@@ -59,7 +51,6 @@ export default {
     raiz = $('#area-clientes', el);
     $('#btn-novo-cliente', el).addEventListener('click', () => abrirFormCliente());
     $('#busca-clientes', el).addEventListener('input', e => { filtros.busca = e.target.value; this.atualizar(); });
-    $('#ordem-clientes', el).addEventListener('change', e => { filtros.ordem = e.target.value; this.atualizar(); });
     raiz.addEventListener('click', e => {
       if (e.target.closest('a')) return;
       if (e.target.closest('[data-novo-cliente]')) { abrirFormCliente(); return; }
@@ -207,12 +198,17 @@ export function abrirFormCliente(id = null, { nome = '', aoSalvar = null } = {})
     corpo: `<form id="form-cliente" class="form-grade" novalidate autocomplete="off">
         ${campo({ rotulo: 'Nome', nome: 'nome', obrigatorio: true, valor: c ? c.nome : nome, classe: 'inteiro', attrs: 'autofocus autocomplete="off"' })}
         ${campo({ rotulo: 'Telefone / WhatsApp', nome: 'telefone', tipo: 'tel', valor: v('telefone'), placeholder: '(00) 00000-0000', attrs: 'inputmode="tel"' })}
-        ${campo({ rotulo: 'CPF ou CNPJ', nome: 'documento', valor: v('documento'), attrs: 'inputmode="numeric"' })}
-        ${campo({ rotulo: 'Endereço', nome: 'endereco', valor: v('endereco'), classe: 'inteiro', placeholder: 'Rua e número' })}
         ${campo({ rotulo: 'Bairro', nome: 'bairro', valor: v('bairro') })}
-        ${campo({ rotulo: 'Cidade', nome: 'cidade', valor: v('cidade') })}
-        ${campo({ rotulo: 'E-mail', nome: 'email', tipo: 'email', valor: v('email'), classe: 'inteiro' })}
-        ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro', placeholder: 'Ex.: ponto de referência, melhor horário' })}
+        ${campo({ rotulo: 'Endereço', nome: 'endereco', valor: v('endereco'), classe: 'inteiro', placeholder: 'Rua e número' })}
+        <details class="inteiro mais-opcoes" ${c && (c.documento || c.cidade || c.email || c.obs) ? 'open' : ''}>
+          <summary>Mais dados</summary>
+          <div class="form-grade">
+            ${campo({ rotulo: 'CPF ou CNPJ', nome: 'documento', valor: v('documento'), attrs: 'inputmode="numeric"' })}
+            ${campo({ rotulo: 'Cidade', nome: 'cidade', valor: v('cidade') })}
+            ${campo({ rotulo: 'E-mail', nome: 'email', tipo: 'email', valor: v('email'), classe: 'inteiro' })}
+            ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro', placeholder: 'Ex.: ponto de referência, melhor horário' })}
+          </div>
+        </details>
       </form>`,
     rodape: `<button type="button" class="btn" data-fechar>Cancelar</button>
              <button type="submit" form="form-cliente" class="btn btn-primario">${c ? 'Salvar alterações' : 'Cadastrar cliente'}</button>`,

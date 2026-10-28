@@ -9,8 +9,8 @@ import { estoqueBaixo, estoqueZerado, numeroOS } from '../regras.js';
 import * as acoes from '../acoes.js';
 import { abrirServico } from './servicos.js';
 
-const filtros = { busca: '', categoria: '', baixo: false, tipoMov: '' };
-let aba = 'produtos';
+// vista: 'produtos', 'baixo' (só o que está acabando) ou 'movimentos'
+const filtros = { busca: '', vista: 'produtos' };
 let raiz = null;
 
 const ROTULO_MOV = { entrada: 'Entrada', saida: 'Saída', ajuste: 'Ajuste' };
@@ -19,34 +19,29 @@ export default {
   titulo: 'Estoque',
 
   montar(el, params = {}) {
-    if (params.baixo) { filtros.baixo = true; aba = 'produtos'; }
-    if (params.aba) aba = params.aba;
+    if (params.baixo) filtros.vista = 'baixo';
+    if (params.aba === 'movimentos') filtros.vista = 'movimentos';
     el.innerHTML = `
       <div class="cab-tela">
         <h1>Estoque</h1>
-        <div class="cab-acoes">
-          <button type="button" class="btn" id="btn-entrada">${icone('entrada')} Entrada</button>
-          <button type="button" class="btn" id="btn-saida">${icone('saida')} Saída</button>
-          ${ehAdmin() ? `<button type="button" class="btn btn-primario" id="btn-novo-produto">${icone('novo')} Novo produto</button>` : ''}
-        </div>
+        ${ehAdmin() ? `<div class="cab-acoes"><button type="button" class="btn btn-primario" id="btn-novo-produto">${icone('novo')} Novo material</button></div>` : ''}
       </div>
-      <div class="segmentado abas" role="tablist" aria-label="Seções do estoque">
-        <button type="button" role="tab" data-aba="produtos" aria-selected="${aba === 'produtos'}">Produtos</button>
-        <button type="button" role="tab" data-aba="movimentos" aria-selected="${aba === 'movimentos'}">Movimentações</button>
+      <div class="barra-ferramentas">
+        <label class="busca">${icone('busca')}<span class="sr">Buscar no estoque</span>
+          <input id="busca-estoque" type="search" placeholder="Buscar material" value="${esc(filtros.busca)}" autocomplete="off"></label>
       </div>
-      <div id="ferramentas-estoque"></div>
+      <div class="chips" id="chips-estoque" role="group" aria-label="O que mostrar"></div>
       <div id="area-estoque"></div>`;
 
     raiz = $('#area-estoque', el);
-    $('#btn-entrada', el).addEventListener('click', () => abrirMovimento({ tipo: 'entrada' }));
-    $('#btn-saida', el).addEventListener('click', () => abrirMovimento({ tipo: 'saida' }));
     $('#btn-novo-produto', el)?.addEventListener('click', () => abrirFormProduto());
-    $$('[data-aba]', el).forEach(b => b.addEventListener('click', () => {
-      aba = b.dataset.aba;
-      $$('[data-aba]', el).forEach(x => x.setAttribute('aria-selected', String(x.dataset.aba === aba)));
-      this.desenharFerramentas();
+    $('#busca-estoque', el).addEventListener('input', e => { filtros.busca = e.target.value; this.atualizar(); });
+    $('#chips-estoque', el).addEventListener('click', e => {
+      const c = e.target.closest('[data-vista]');
+      if (!c) return;
+      filtros.vista = c.dataset.vista;
       this.atualizar();
-    }));
+    });
 
     raiz.addEventListener('click', e => {
       const mov = e.target.closest('[data-mov]');
@@ -61,83 +56,43 @@ export default {
       if (e.key === 'Enter' && e.target.matches('[data-abrir-produto]')) abrirProduto(e.target.dataset.abrirProduto);
     });
 
-    this.desenharFerramentas();
     this.atualizar();
-  },
-
-  desenharFerramentas() {
-    const caixa = $('#ferramentas-estoque');
-    if (!caixa) return;
-    if (aba === 'produtos') {
-      const cats = [...new Set([...CATEGORIAS_PRODUTO, ...estado.produtos.map(p => p.categoria).filter(Boolean)])];
-      caixa.innerHTML = `<div class="barra-ferramentas">
-          <label class="busca">${icone('busca')}<span class="sr">Buscar produto</span>
-            <input id="busca-produtos" type="search" placeholder="Buscar produto ou fornecedor" value="${esc(filtros.busca)}" autocomplete="off"></label>
-          <label class="seletor-inline"><span>Categoria</span>
-            <select id="cat-produtos"><option value="">Todas</option>${cats.map(c => `<option ${c === filtros.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-          <label class="alternar"><input type="checkbox" id="so-baixo" ${filtros.baixo ? 'checked' : ''}> <span>Só estoque baixo</span></label>
-        </div>`;
-      $('#busca-produtos').addEventListener('input', e => { filtros.busca = e.target.value; this.atualizar(); });
-      $('#cat-produtos').addEventListener('change', e => { filtros.categoria = e.target.value; this.atualizar(); });
-      $('#so-baixo').addEventListener('change', e => { filtros.baixo = e.target.checked; this.atualizar(); });
-    } else {
-      caixa.innerHTML = `<div class="barra-ferramentas">
-          <label class="busca">${icone('busca')}<span class="sr">Buscar movimentação</span>
-            <input id="busca-movs" type="search" placeholder="Produto, motivo ou pessoa" value="${esc(filtros.busca)}" autocomplete="off"></label>
-          <label class="seletor-inline"><span>Tipo</span>
-            <select id="tipo-movs">
-              <option value="">Todos</option>
-              ${Object.entries(ROTULO_MOV).map(([v, t]) => `<option value="${v}" ${filtros.tipoMov === v ? 'selected' : ''}>${t}</option>`).join('')}
-            </select></label>
-        </div>`;
-      $('#busca-movs').addEventListener('input', e => { filtros.busca = e.target.value; this.atualizar(); });
-      $('#tipo-movs').addEventListener('change', e => { filtros.tipoMov = e.target.value; this.atualizar(); });
-    }
   },
 
   atualizar() {
     if (!raiz || !document.contains(raiz)) return;
-    if (aba === 'movimentos') { raiz.innerHTML = listaMovimentos(); return; }
+    const acabando = estado.produtos.filter(p => estoqueBaixo(p) || (estoqueZerado(p) && lerNumero(p.estoqueMinimo) > 0));
+    const chips = $('#chips-estoque');
+    if (chips) {
+      chips.innerHTML = [['produtos', 'Todos', estado.produtos.length], ['baixo', 'Acabando', acabando.length], ['movimentos', 'Entradas e saídas', null]]
+        .map(([id, nome, n]) => `<button type="button" class="chip${id === 'baixo' && n ? ' chip-alerta' : ''}" data-vista="${id}" aria-pressed="${filtros.vista === id}">${nome}${n !== null ? ` <span class="chip-n">${n}</span>` : ''}</button>`)
+        .join('');
+    }
+    if (filtros.vista === 'movimentos') { raiz.innerHTML = listaMovimentos(); return; }
     if (!carregou('produtos')) { raiz.innerHTML = carregandoHtml('Carregando estoque…'); return; }
 
     const t = filtros.busca.trim();
-    let lista = estado.produtos;
+    let lista = filtros.vista === 'baixo' ? acabando : estado.produtos;
     if (t) lista = lista.filter(p => contem(`${p.nome} ${p.fornecedor} ${p.categoria}`, t));
-    if (filtros.categoria) lista = lista.filter(p => p.categoria === filtros.categoria);
-    const baixos = estado.produtos.filter(estoqueBaixo).length;
-    if (filtros.baixo) lista = lista.filter(p => estoqueBaixo(p) || estoqueZerado(p));
     lista = [...lista].sort((a, b) => {
       const pa = estoqueZerado(a) || estoqueBaixo(a) ? 0 : 1;
       const pb = estoqueZerado(b) || estoqueBaixo(b) ? 0 : 1;
       return pa - pb || a.nome.localeCompare(b.nome, 'pt-BR');
     });
 
-    const admin = ehAdmin();
-    const valorCusto = estado.produtos.reduce((s, p) => s + Math.max(0, lerNumero(p.quantidade)) * lerNumero(p.custo), 0);
-
-    const resumo = `<div class="resumo-linha">
-        <span><strong>${estado.produtos.length}</strong> produtos</span>
-        ${baixos ? `<button type="button" class="link texto-alerta" id="ver-baixos">${icone('alerta')} ${baixos} com estoque baixo</button>` : '<span class="texto-ok">Nenhum produto abaixo do mínimo</span>'}
-        ${admin ? `<span>Valor em estoque (custo) <strong>${moeda(valorCusto)}</strong></span>` : ''}
-      </div>`;
-
     if (!lista.length) {
-      raiz.innerHTML = resumo + vazio(estado.produtos.length ? 'Nenhum produto com esses filtros.' : 'Nenhum produto cadastrado ainda.',
-        admin && !estado.produtos.length ? `<button type="button" class="btn btn-primario" data-novo-produto>${icone('novo')} Cadastrar produto</button>` : '');
-    } else {
-      raiz.innerHTML = resumo + `<div class="tabela-linhas t-produtos${admin ? ' com-precos' : ''}">
-          <div class="linha cabecalho" aria-hidden="true">
-            <span>Produto</span><span>Em estoque</span><span>Mínimo</span>${admin ? '<span>Custo</span><span>Venda</span>' : ''}<span></span>
-          </div>
-          ${lista.map(p => linhaProduto(p, admin)).join('')}
-        </div>`;
+      const admin = ehAdmin();
+      raiz.innerHTML = vazio(
+        filtros.vista === 'baixo' && !t ? 'Nenhum material acabando.' : estado.produtos.length ? 'Nenhum material encontrado.' : 'Nenhum material cadastrado ainda.',
+        admin && !estado.produtos.length ? `<button type="button" class="btn btn-primario" data-novo-produto>${icone('novo')} Cadastrar material</button>` : '');
+      return;
     }
-    $('#ver-baixos', raiz)?.addEventListener('click', () => {
-      filtros.baixo = true;
-      const cb = $('#so-baixo');
-      if (cb) cb.checked = true;
-      this.atualizar();
-    });
+    const valorCusto = estado.produtos.reduce((soma, p) => soma + Math.max(0, lerNumero(p.quantidade)) * lerNumero(p.custo), 0);
+    raiz.innerHTML = `<div class="tabela-linhas t-produtos">
+        <div class="linha cabecalho" aria-hidden="true"><span>Material</span><span>Em estoque</span><span>Mínimo</span><span></span></div>
+        ${lista.map(linhaProduto).join('')}
+      </div>
+      ${ehAdmin() ? `<p class="texto-suave nota-rodape">Valor em estoque pelo custo: <strong>${moeda(valorCusto)}</strong></p>` : ''}`;
   },
 };
 
@@ -154,17 +109,16 @@ function etiquetaEstoque(p) {
   return '';
 }
 
-function linhaProduto(p, admin) {
+function linhaProduto(p) {
   const classe = estoqueZerado(p) ? 'zerado' : estoqueBaixo(p) ? 'baixo' : '';
   return `<div class="linha ${classe}" data-abrir-produto="${p.id}" tabindex="0">
-      <div class="c-principal"><div><strong>${esc(p.nome)}</strong><span>${esc(p.categoria || '')}${p.fornecedor ? `, ${esc(p.fornecedor)}` : ''}</span></div></div>
+      <div class="c-principal"><div><strong>${esc(p.nome)}</strong><span>${esc(p.categoria || '')}</span></div></div>
       <div class="c-qtd" data-rotulo="Em estoque">
         <span class="qtd"><strong>${num(p.quantidade, 3)}</strong> ${esc(p.unidade)}</span>
         <span class="nivel" aria-hidden="true"><span style="width:${nivel(p)}%"></span></span>
         ${etiquetaEstoque(p)}
       </div>
       <div class="c-info texto-suave" data-rotulo="Mínimo">${lerNumero(p.estoqueMinimo) ? `${num(p.estoqueMinimo, 3)} ${esc(p.unidade)}` : '–'}</div>
-      ${admin ? `<div class="c-info" data-rotulo="Custo">${moeda(p.custo)}</div><div class="c-info" data-rotulo="Venda">${moeda(p.preco)}</div>` : ''}
       <div class="c-acoes">
         <button type="button" class="btn btn-pequeno" data-mov="entrada" data-id="${p.id}" aria-label="Entrada de ${esc(p.nome)}">${icone('entrada')}<span>Entrada</span></button>
         <button type="button" class="btn btn-pequeno" data-mov="saida" data-id="${p.id}" aria-label="Saída de ${esc(p.nome)}">${icone('saida')}<span>Saída</span></button>
@@ -190,9 +144,8 @@ function listaMovimentos(produtoId = null) {
   let lista = estado.movimentos;
   if (produtoId) lista = lista.filter(m => m.produtoId === produtoId);
   else {
-    if (filtros.tipoMov) lista = lista.filter(m => m.tipo === filtros.tipoMov);
     const t = filtros.busca.trim();
-    if (t) lista = lista.filter(m => contem(`${m.produtoNome} ${m.motivo} ${m.usuarioNome} ${m.servicoNumero || ''}`, t));
+    if (t) lista = lista.filter(m => contem(`${m.produtoNome} ${m.motivo} ${m.usuarioNome} ${ROTULO_MOV[m.tipo] || ''} ${m.servicoNumero || ''}`, t));
   }
   lista = [...lista].sort((a, b) => String(b.data).localeCompare(String(a.data)));
   if (!lista.length) return vazio(produtoId ? 'Nenhuma movimentação recente deste produto.' : 'Nenhuma movimentação encontrada.');
@@ -382,7 +335,7 @@ export function abrirFormProduto(id = null) {
   const v = k => (p ? p[k] ?? '' : '');
   const cats = [...new Set([...CATEGORIAS_PRODUTO, ...estado.produtos.map(x => x.categoria).filter(Boolean)])];
   abrirModal({
-    titulo: p ? 'Editar produto' : 'Novo produto',
+    titulo: p ? 'Editar material' : 'Novo material',
     fecharFora: false,
     corpo: `<form id="form-produto" class="form-grade" novalidate autocomplete="off">
         ${campo({ rotulo: 'Nome do produto', nome: 'nome', obrigatorio: true, valor: v('nome'), classe: 'inteiro', placeholder: 'Ex.: vidro temperado 8mm incolor', attrs: 'autofocus' })}
@@ -393,8 +346,13 @@ export function abrirFormProduto(id = null) {
         ${campo({ rotulo: 'Custo (R$ por unidade)', nome: 'custo', valor: numCampo(v('custo')), attrs: ATTR_DECIMAL })}
         ${campo({ rotulo: 'Preço de venda (R$ por unidade)', nome: 'preco', valor: numCampo(v('preco')), attrs: ATTR_DECIMAL })}
         <p class="inteiro texto-suave" id="margem"></p>
-        ${campo({ rotulo: 'Fornecedor', nome: 'fornecedor', valor: v('fornecedor'), classe: 'inteiro' })}
-        ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro' })}
+        <details class="inteiro mais-opcoes" ${p && (p.fornecedor || p.obs) ? 'open' : ''}>
+          <summary>Mais dados</summary>
+          <div class="form-grade">
+            ${campo({ rotulo: 'Fornecedor', nome: 'fornecedor', valor: v('fornecedor'), classe: 'inteiro' })}
+            ${campo({ rotulo: 'Observações', nome: 'obs', tipo: 'textarea', linhas: 2, valor: v('obs'), classe: 'inteiro' })}
+          </div>
+        </details>
       </form>`,
     rodape: `<button type="button" class="btn" data-fechar>Cancelar</button>
              <button type="submit" form="form-produto" class="btn btn-primario">${p ? 'Salvar alterações' : 'Cadastrar produto'}</button>`,

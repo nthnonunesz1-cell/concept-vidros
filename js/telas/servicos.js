@@ -20,7 +20,9 @@ import { abrirDocumento, textoOrcamento } from '../documento.js';
 
 // ------------------------------------------------------------------ preferências da tela
 
-const filtros = { status: 'fila', busca: '', meus: false };
+// filtro: 'fila' (tudo em aberto), 'meus', 'atrasados', 'concluido' ou 'cancelado'
+const filtros = { status: 'fila', busca: '' };
+const FILTROS = [['fila', 'Na fila'], ['meus', 'Meus'], ['atrasados', 'Atrasados'], ['concluido', 'Concluídos'], ['cancelado', 'Cancelados']];
 
 function lerPref(chave, padrao) {
   try { return localStorage.getItem(`vid-${chave}`) || padrao; } catch { return padrao; }
@@ -38,9 +40,8 @@ export default {
   titulo: 'Serviços',
 
   montar(el, params = {}) {
-    if (params.filtro) filtros.status = params.filtro;
-    if (params.filtro) visao = 'lista';
-    if (params.meus) filtros.meus = params.meus === '1';
+    if (params.filtro) filtros.status = FILTROS.some(([id]) => id === params.filtro) ? params.filtro : 'fila';
+    if (params.meus === '1') filtros.status = 'meus';
 
     el.innerHTML = `
       <div class="cab-tela">
@@ -55,13 +56,12 @@ export default {
           <span class="sr">Buscar serviço</span>
           <input id="busca-servicos" type="search" placeholder="Cliente, número, descrição…" value="${esc(filtros.busca)}" autocomplete="off">
         </label>
-        <label class="alternar"><input type="checkbox" id="so-meus" ${filtros.meus ? 'checked' : ''}> <span>Só os meus</span></label>
         <div class="segmentado" role="group" aria-label="Como mostrar">
           <button type="button" data-visao="quadro" aria-pressed="${visao === 'quadro'}">${icone('quadro')} Quadro</button>
           <button type="button" data-visao="lista" aria-pressed="${visao === 'lista'}">${icone('lista')} Lista</button>
         </div>
       </div>
-      <div class="chips" id="chips-servicos" role="group" aria-label="Filtrar por etapa"></div>
+      <div class="chips" id="chips-servicos" role="group" aria-label="Filtrar serviços"></div>
       <div id="area-servicos"></div>`;
 
     raiz = $('#area-servicos', el);
@@ -70,7 +70,6 @@ export default {
 
     $('#btn-novo-servico', el).addEventListener('click', () => abrirFormServico());
     $('#busca-servicos', el).addEventListener('input', e => { filtros.busca = e.target.value; this.atualizar(); });
-    $('#so-meus', el).addEventListener('change', e => { filtros.meus = e.target.checked; this.atualizar(); });
     $$('[data-visao]', el).forEach(b => b.addEventListener('click', () => {
       visao = b.dataset.visao;
       gravarPref('visao-servicos', visao);
@@ -97,36 +96,27 @@ export default {
       return;
     }
     const base = filtrarBase();
-
-    if (visao === 'quadro') {
-      chips.hidden = true;
-      raiz.innerHTML = quadroHtml(base);
-      return;
-    }
-
-    chips.hidden = false;
-    const contagem = id => porStatus(base, id).length;
-    const opcoes = [
-      ['fila', 'Na fila'],
-      ['atrasados', 'Atrasados'],
-      ...STATUS.map(s => [s.id, s.curto]),
-      ['todos', 'Todos'],
-    ];
-    chips.innerHTML = opcoes.map(([id, nome]) => {
-      const n = contagem(id);
+    chips.innerHTML = FILTROS.map(([id, nome]) => {
+      const n = porStatus(base, id).length;
       const alerta = id === 'atrasados' && n > 0 ? ' chip-alerta' : '';
       return `<button type="button" class="chip${alerta}" data-filtro="${id}" aria-pressed="${filtros.status === id}">${esc(nome)} <span class="chip-n">${n}</span></button>`;
     }).join('');
 
     let lista = porStatus(base, filtros.status);
-    if (['concluido', 'cancelado', 'todos'].includes(filtros.status)) {
+    const encerrados = ['concluido', 'cancelado'].includes(filtros.status);
+    // concluídos e cancelados não têm coluna no quadro: aparecem em lista
+    if (visao === 'quadro' && !encerrados) {
+      raiz.innerHTML = quadroHtml(lista);
+      return;
+    }
+    if (encerrados) {
       lista = [...lista].sort((a, b) => String(b.atualizadoEm || '').localeCompare(String(a.atualizadoEm || '')));
     } else {
       lista = [...lista].sort(ordenarFila);
     }
     if (!lista.length) {
       raiz.innerHTML = vazio(
-        filtros.busca ? 'Nenhum serviço encontrado com essa busca.' : 'Nenhum serviço nesta etapa.',
+        filtros.busca ? 'Nenhum serviço encontrado com essa busca.' : 'Nenhum serviço aqui.',
         `<button type="button" class="btn btn-primario" data-novo-servico>${icone('novo')} Novo serviço</button>`,
       );
       return;
@@ -137,7 +127,6 @@ export default {
 
 function filtrarBase() {
   let lista = estado.servicos;
-  if (filtros.meus) lista = lista.filter(s => s.responsavelId === estado.usuario?.id);
   const t = filtros.busca.trim();
   if (t) {
     const dig = soDigitos(t);
@@ -150,8 +139,8 @@ function filtrarBase() {
 
 function porStatus(lista, f) {
   if (f === 'fila') return lista.filter(s => STATUS_FILA.includes(s.status));
+  if (f === 'meus') return lista.filter(s => STATUS_FILA.includes(s.status) && s.responsavelId === estado.usuario?.id);
   if (f === 'atrasados') return lista.filter(atrasado);
-  if (f === 'todos') return lista;
   return lista.filter(s => s.status === f);
 }
 
@@ -175,7 +164,7 @@ function quadroHtml(lista) {
 
 // ------------------------------------------------------------------ ficha (cartão da OS)
 
-export function fichaServico(s, { mostrarStatus = true, arrastavel = false, comAcoes = true } = {}) {
+export function fichaServico(s, { mostrarStatus = true, arrastavel = false, comAcoes = true, pegar = false } = {}) {
   const st = statusInfo(s.status);
   const late = atrasado(s);
   const prox = PROXIMO_STATUS[s.status];
@@ -192,19 +181,16 @@ export function fichaServico(s, { mostrarStatus = true, arrastavel = false, comA
         </span>
       </div>
       <h3 class="ficha-cliente">${esc(s.clienteNome || 'Sem cliente')}</h3>
-      ${s.tipo ? `<p class="ficha-tipo">${esc(s.tipo)}</p>` : ''}
-      <p class="ficha-desc">${esc(s.descricao || '')}</p>
+      <p class="ficha-desc">${s.tipo ? `<span class="ficha-tipo">${esc(s.tipo)}</span> ` : ''}${esc(s.descricao || '')}</p>
       <div class="ficha-meta">
         ${s.dataPrevista ? `<span class="${late ? 'texto-perigo' : ''}">${icone('calendario')}${esc(dataRelativa(s.dataPrevista))}</span>` : ''}
-        <span class="${semResp ? 'texto-alerta' : ''}">${icone('usuario')}${s.responsavelNome ? esc(primeiroNome(s.responsavelNome)) : 'Sem responsável'}</span>
+        ${s.responsavelNome ? `<span>${icone('usuario')}${esc(primeiroNome(s.responsavelNome))}</span>` : ''}
+        <span class="ficha-valor">${moeda(s.valorTotal)}${saldo > 0 ? ` <small>falta ${moeda(saldo)}</small>` : ''}</span>
       </div>
-      <div class="ficha-rodape">
-        <span class="ficha-valor">${moeda(s.valorTotal)}${saldo > 0 ? `<small>falta ${moeda(saldo)}</small>` : ''}</span>
-        ${comAcoes ? `<span class="ficha-acoes">
-          ${semResp ? `<button type="button" class="btn btn-pequeno" data-pegar="${s.id}" title="Ficar responsável por este serviço">${icone('pegar')}<span>Pegar</span></button>` : ''}
-          ${prox ? `<button type="button" class="btn btn-pequeno btn-avancar" data-avancar="${s.id}">${esc(ROTULO_AVANCAR[prox])}</button>` : ''}
-        </span>` : ''}
-      </div>
+      ${comAcoes && (prox || (pegar && semResp)) ? `<div class="ficha-acoes">
+        ${pegar && semResp ? `<button type="button" class="btn btn-pequeno" data-pegar="${s.id}">${icone('pegar')}<span>Pegar para mim</span></button>`
+          : `<button type="button" class="btn btn-pequeno btn-avancar" data-avancar="${s.id}">${esc(ROTULO_AVANCAR[prox])}</button>`}
+      </div>` : ''}
     </article>`;
 }
 
@@ -349,21 +335,29 @@ export function abrirServico(id) {
     titulo: `OS ${numeroOS(inicial.numero)}`,
     classe: 'modal-largo modal-servico',
     corpo: `<div class="det-conteudo"></div>
-      <form class="nota-form" autocomplete="off">
-        <label class="sr" for="nota-${id}">Nova anotação</label>
-        <input id="nota-${id}" name="nota" placeholder="Escrever uma anotação no histórico" maxlength="500">
-        <button type="submit" class="btn">${icone('nota')} Anotar</button>
-      </form>
+      <details class="det-historico">
+        <summary>Histórico e anotações</summary>
+        <form class="nota-form" autocomplete="off">
+          <label class="sr" for="nota-${id}">Nova anotação</label>
+          <input id="nota-${id}" name="nota" placeholder="Escrever uma anotação" maxlength="500">
+          <button type="submit" class="btn">${icone('nota')} Anotar</button>
+        </form>
+        <ol class="linha-tempo"></ol>
+      </details>
       <div class="det-mais"></div>`,
     rodape: '<span></span>',
     aoMontar(m) {
       const conteudo = $('.det-conteudo', m.el);
       const mais = $('.det-mais', m.el);
+      const tempo = $('.linha-tempo', m.el);
+      const resumoHist = $('.det-historico summary', m.el);
 
       const desenhar = () => {
         const s = buscar('servicos', id);
         if (!s) { m.fechar(); return; }
         conteudo.innerHTML = detalheHtml(s);
+        tempo.innerHTML = historicoHtml(s);
+        resumoHist.textContent = `Histórico e anotações (${(s.historico || []).length})`;
         mais.innerHTML = maisAcoesHtml(s);
         m.rodape.innerHTML = rodapeHtml(s);
       };
@@ -424,7 +418,6 @@ function detalheHtml(s) {
   const tel = cliente?.telefone || s.clienteTelefone;
   const whats = linkWhatsApp(tel, mensagemWhats(s));
   const mats = materiaisDoServico(s);
-  const movs = estado.movimentos.filter(mv => mv.servicoId === s.id);
   const ordemFluxo = ['orcamento', 'aprovado', 'aguardando', 'producao', 'pronto', 'concluido'];
   const posAtual = ordemFluxo.indexOf(s.status);
   const usuariosAtivos = estado.usuarios.filter(u => u.ativo !== false && u.nome);
@@ -453,18 +446,11 @@ function detalheHtml(s) {
       ${ehAdmin() ? `<button type="button" class="btn-icone btn-pequeno" data-acao="remover-pagamento" data-id="${p.id}" aria-label="Remover pagamento">${icone('lixeira')}</button>` : ''}
     </li>`).join('');
 
-  const historico = [...(s.historico || [])].reverse().map(h => `<li class="${h.nota ? 'h-nota' : `h-status st-${h.status}`}">
-      <span class="h-quando">${dataHoraBR(h.data)}</span>
-      <span class="h-texto">${h.nota ? esc(h.obs) : `<strong>${esc(statusInfo(h.status).nome)}</strong>${h.obs ? `: ${esc(h.obs)}` : ''}`}</span>
-      <span class="h-quem">${esc(h.usuarioNome || '')}</span>
-    </li>`).join('');
-
   return `
     <div class="det-topo">
       <span class="etiqueta et-st st-${s.status}">${esc(st.nome)}</span>
       ${s.prioridade === 'urgente' ? '<span class="etiqueta et-urgente">Urgente</span>' : ''}
       ${late ? '<span class="etiqueta et-perigo">Atrasado</span>' : ''}
-      <span class="det-criado">Criado em ${dataBR(s.criadoEm)}${s.criadoPor ? ` por ${esc(s.criadoPor)}` : ''}</span>
     </div>
     ${passos}
 
@@ -480,8 +466,7 @@ function detalheHtml(s) {
 
       <section class="det-bloco">
         <dl class="det-dados">
-          <div><dt>Tipo</dt><dd>${esc(s.tipo || 'Não informado')}</dd></div>
-          <div><dt>Data prevista</dt><dd class="${late ? 'texto-perigo' : ''}">${s.dataPrevista ? `${dataBR(s.dataPrevista)} (${esc(dataRelativa(s.dataPrevista))})` : 'A combinar'}</dd></div>
+          <div><dt>Entrega</dt><dd class="${late ? 'texto-perigo' : ''}">${s.dataPrevista ? `${dataBR(s.dataPrevista)} (${esc(dataRelativa(s.dataPrevista))})` : 'A combinar'}</dd></div>
           <div><dt><label for="resp-${s.id}">Responsável</label></dt><dd>
             <select id="resp-${s.id}" data-responsavel>
               <option value="">Sem responsável</option>
@@ -495,7 +480,7 @@ function detalheHtml(s) {
     </div>
 
     <section class="det-bloco">
-      <h3>O que fazer</h3>
+      <h3>${esc(s.tipo || 'O que fazer')}</h3>
       <p class="det-desc">${esc(s.descricao || '')}</p>
       ${s.obs ? `<p class="det-obs">${icone('nota')}<span>${esc(s.obs)}</span></p>` : ''}
     </section>
@@ -512,6 +497,11 @@ function detalheHtml(s) {
         ${desconto ? `<div><dt>Desconto</dt><dd>− ${moeda(desconto)}</dd></div>` : ''}
         <div class="total"><dt>Total</dt><dd>${moeda(total)}</dd></div>
       </dl>
+      ${s.status !== 'cancelado' ? `<p class="det-estoque">
+        ${mats.length && s.estoqueBaixado ? `<span class="texto-ok">${icone('check')} Baixa no estoque feita</span>` : ''}
+        ${mats.length && !s.estoqueBaixado ? `<button type="button" class="btn btn-pequeno" data-acao="baixar">${icone('saida')} Dar baixa no estoque</button>` : ''}
+        <button type="button" class="link" data-acao="material">Usar outro material do estoque</button>
+      </p>` : ''}
     </section>
 
     <section class="det-bloco">
@@ -522,39 +512,24 @@ function detalheHtml(s) {
       <div class="medidor-pago" aria-hidden="true"><span style="width:${total ? Math.min(100, (pago / total) * 100) : 0}%"></span></div>
       <p class="resumo-pago">Pago <strong>${moeda(pago)}</strong> de ${moeda(total)}${saldo > 0 ? `. Falta <strong class="texto-alerta">${moeda(saldo)}</strong>` : pago ? '. Tudo pago.' : ''}</p>
       ${pagamentos ? `<ul class="lista-pagamentos">${pagamentos}</ul>` : ''}
-    </section>
-
-    <section class="det-bloco">
-      <div class="bloco-cab">
-        <h3>Materiais do estoque</h3>
-        ${s.status !== 'cancelado' ? `<button type="button" class="btn btn-pequeno" data-acao="material">${icone('saida')} Usar outro material</button>` : ''}
-      </div>
-      ${mats.length
-        ? (s.estoqueBaixado
-          ? `<p class="texto-ok">${icone('check')} Baixa no estoque já feita para os itens do serviço.</p>`
-          : `<p>${mats.length} ${mats.length === 1 ? 'item ligado' : 'itens ligados'} ao estoque ainda sem baixa.
-              <button type="button" class="btn btn-pequeno" data-acao="baixar">${icone('saida')} Dar baixa agora</button></p>`)
-        : '<p class="texto-suave">Nenhum item ligado ao estoque.</p>'}
-      ${movs.length ? `<ul class="lista-movs">${movs.map(mv => `<li>
-          <span>${dataBR(mv.data)}</span><span>${esc(mv.produtoNome)}</span>
-          <strong>${mv.tipo === 'entrada' ? '+' : '−'}${num(mv.quantidade, 3)} ${esc(mv.unidade || '')}</strong>
-        </li>`).join('')}</ul>` : ''}
-    </section>
-
-    <section class="det-bloco">
-      <h3>Histórico</h3>
-      <ol class="linha-tempo">${historico}</ol>
     </section>`;
 }
 
+function historicoHtml(s) {
+  return [...(s.historico || [])].reverse().map(h => `<li class="${h.nota ? 'h-nota' : `h-status st-${h.status}`}">
+      <span class="h-quando">${dataHoraBR(h.data)}</span>
+      <span class="h-texto">${h.nota ? esc(h.obs) : `<strong>${esc(statusInfo(h.status).nome)}</strong>${h.obs ? `: ${esc(h.obs)}` : ''}`}</span>
+      <span class="h-quem">${esc(h.usuarioNome || '')}</span>
+    </li>`).join('');
+}
+
+// Ações menos usadas ficam discretas no fim da janela.
+// Orçamento, recibo e OS da produção ficam todos no botão "Enviar PDF".
 function maisAcoesHtml(s) {
   return `<div class="det-acoes-extra">
-      <button type="button" class="btn" data-acao="orcamento">${icone('documento')} ${s.status === 'orcamento' ? 'Orçamento em PDF' : 'Pedido em PDF'}</button>
-      ${totalPago(s) > 0 ? `<button type="button" class="btn" data-acao="recibo">${icone('documento')} Recibo em PDF</button>` : ''}
-      <button type="button" class="btn" data-acao="os">${icone('documento')} OS da produção</button>
-      ${s.status !== 'cancelado' && s.status !== 'concluido' ? `<button type="button" class="btn" data-acao="cancelar">${icone('x')} Cancelar serviço</button>` : ''}
-      ${s.status === 'concluido' ? `<button type="button" class="btn" data-acao="reabrir">${icone('reabrir')} Reabrir</button>` : ''}
-      ${ehAdmin() ? `<button type="button" class="btn btn-perigo-texto" data-acao="excluir">${icone('lixeira')} Excluir</button>` : ''}
+      ${s.status !== 'cancelado' && s.status !== 'concluido' ? `<button type="button" class="link link-suave" data-acao="cancelar">Cancelar serviço</button>` : ''}
+      ${s.status === 'concluido' ? `<button type="button" class="link link-suave" data-acao="reabrir">Reabrir serviço</button>` : ''}
+      ${ehAdmin() ? `<button type="button" class="link link-perigo" data-acao="excluir">Excluir</button>` : ''}
     </div>`;
 }
 
@@ -681,32 +656,34 @@ function opcoesProdutos(sel) {
   for (const p of [...estado.produtos].sort((a, b) => a.nome.localeCompare(b.nome))) (grupos[p.categoria || 'Outros'] ||= []).push(p);
   const ops = Object.entries(grupos).map(([cat, lista]) => `<optgroup label="${esc(cat)}">${lista.map(p =>
     `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</optgroup>`).join('');
-  return `<option value="">Avulso (fora do estoque)</option>${ops}`;
+  return `<option value="">Outro (digitar)</option>${ops}`;
 }
 
+// Com produto do estoque escolhido, a descrição e a forma de cobrar vêm do produto
+// e somem da tela. Item avulso mostra os dois campos.
 function linhaItem(it, i) {
   const calc = calcularItem(it);
   const prod = it.produtoId ? buscar('produtos', it.produtoId) : null;
   const ligado = !!prod;
   const id = k => `it-${i}-${k}`;
   const rotMed = it.modo === 'm' ? `Compr. (${ROTULO_MEDIDA})` : `Larg. (${ROTULO_MEDIDA})`;
-  return `<div class="item-servico" data-i="${i}">
+  return `<div class="item-servico${ligado ? ' ligado' : ''} modo-${it.modo || 'un'}" data-i="${i}">
       <span class="item-n">${i + 1}</span>
       <div class="campo is-produto">
-        <label for="${id('p')}">Produto do estoque</label>
+        <label for="${id('p')}">Material</label>
         <select id="${id('p')}" data-k="produtoId">${opcoesProdutos(it.produtoId)}</select>
         ${prod ? `<small class="dica">Em estoque: ${num(prod.quantidade, 3)} ${esc(prod.unidade)}</small>` : ''}
       </div>
-      <div class="campo is-desc">
+      ${ligado ? '' : `<div class="campo is-desc">
         <label for="${id('d')}">Descrição</label>
         <input id="${id('d')}" data-k="descricao" value="${esc(it.descricao)}" placeholder="Ex.: vidro 8mm incolor">
       </div>
       <div class="campo is-modo">
         <label for="${id('m')}">Cobrar por</label>
-        <select id="${id('m')}" data-k="modo" ${ligado ? 'disabled' : ''}>
+        <select id="${id('m')}" data-k="modo">
           ${[['m2', 'm²'], ['m', 'metro'], ['un', 'unidade']].map(([v, t]) => `<option value="${v}" ${it.modo === v ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
-      </div>
+      </div>`}
       ${it.modo !== 'un' ? `<div class="campo is-med is-larg"><label for="${id('l')}">${rotMed}</label><input id="${id('l')}" data-k="larg" value="${esc(numCampo(it.larg, 1))}" ${ATTR_DECIMAL}></div>` : ''}
       ${it.modo === 'm2' ? `<div class="campo is-med is-alt"><label for="${id('a')}">Alt. (${ROTULO_MEDIDA})</label><input id="${id('a')}" data-k="alt" value="${esc(numCampo(it.alt, 1))}" ${ATTR_DECIMAL}></div>` : ''}
       <div class="campo is-qtd"><label for="${id('q')}">Qtd.</label><input id="${id('q')}" data-k="qtd" value="${esc(numCampo(it.qtd, 3))}" ${ATTR_DECIMAL}></div>
@@ -802,28 +779,36 @@ export function abrirFormServico(id = null, { clienteId = '' } = {}) {
   const clienteIni = clienteSel ? (buscar('clientes', clienteSel) || (s ? { id: clienteSel, nome: s.clienteNome, telefone: s.clienteTelefone } : null)) : null;
   const usuariosAtivos = estado.usuarios.filter(u => u.ativo !== false && u.nome);
 
+  // abre o "Mais opções" quando já tem algo preenchido nele
+  const temExtras = !!(s && (s.prioridade === 'urgente' || s.responsavelId || s.formaCombinada || s.desconto || s.obs));
+
   const corpo = `<form id="form-servico" class="form-grade" novalidate autocomplete="off">
       ${seletorClienteHtml()}
       ${campo({ rotulo: 'Tipo de serviço', nome: 'tipo', tipo: 'select', opcoes: TIPOS_SERVICO, valor: s?.tipo || TIPOS_SERVICO[0] })}
-      ${campo({ rotulo: 'Prioridade', nome: 'prioridade', tipo: 'select', opcoes: [['normal', 'Normal'], ['urgente', 'Urgente']], valor: s?.prioridade || 'normal' })}
+      ${campo({ rotulo: 'Entrega prevista', nome: 'dataPrevista', tipo: 'date', valor: s?.dataPrevista || '' })}
       ${campo({ rotulo: 'O que fazer', nome: 'descricao', tipo: 'textarea', linhas: 2, obrigatorio: true, valor: s?.descricao || '', classe: 'inteiro', placeholder: 'Ex.: box frontal de correr 8mm incolor, banheiro social' })}
       ${campo({ rotulo: 'Endereço da obra', nome: 'endereco', valor: s?.endereco || '', classe: 'inteiro', placeholder: 'Rua, número, bairro' })}
-      ${campo({ rotulo: 'Data prevista de entrega', nome: 'dataPrevista', tipo: 'date', valor: s?.dataPrevista || '' })}
-      ${campo({ rotulo: 'Responsável', nome: 'responsavelId', tipo: 'select', valor: s?.responsavelId || '', opcoes: [['', 'Sem responsável'], ...usuariosAtivos.map(u => [u.id, u.nome])] })}
-      ${!s ? campo({ rotulo: 'Começa como', nome: 'status', tipo: 'select', opcoes: [['orcamento', 'Orçamento (cliente ainda vai decidir)'], ['aprovado', 'Aprovado (já fechado)']], valor: 'orcamento' }) : ''}
-      ${campo({ rotulo: 'Pagamento combinado', nome: 'formaCombinada', valor: s?.formaCombinada || '', placeholder: 'Ex.: 50% de entrada, resto na instalação', classe: s ? 'inteiro' : '' })}
 
       <fieldset class="inteiro bloco-itens">
         <legend>Itens e medidas</legend>
-        <p class="dica">Escolha um produto do estoque para puxar o preço e dar baixa depois, ou deixe avulso.</p>
         <div id="itens-servico"></div>
         <button type="button" class="btn" id="add-item">${icone('novo')} Adicionar item</button>
       </fieldset>
 
       ${campo({ rotulo: 'Mão de obra / instalação (R$)', nome: 'maoDeObra', valor: numCampo(s?.maoDeObra), attrs: ATTR_DECIMAL })}
-      ${campo({ rotulo: 'Desconto (R$)', nome: 'desconto', valor: numCampo(s?.desconto), attrs: ATTR_DECIMAL })}
-      <div class="inteiro resumo-total" id="resumo-total" aria-live="polite"></div>
-      ${campo({ rotulo: 'Observações internas', nome: 'obs', tipo: 'textarea', linhas: 2, valor: s?.obs || '', classe: 'inteiro', placeholder: 'Só a equipe vê. Ex.: levar escada grande' })}
+      <div class="resumo-total" id="resumo-total" aria-live="polite"></div>
+
+      <details class="inteiro mais-opcoes" ${temExtras ? 'open' : ''}>
+        <summary>Mais opções</summary>
+        <div class="form-grade">
+          ${!s ? campo({ rotulo: 'Começa como', nome: 'status', tipo: 'select', opcoes: [['orcamento', 'Orçamento'], ['aprovado', 'Já aprovado']], valor: 'orcamento' }) : ''}
+          ${campo({ rotulo: 'Prioridade', nome: 'prioridade', tipo: 'select', opcoes: [['normal', 'Normal'], ['urgente', 'Urgente']], valor: s?.prioridade || 'normal' })}
+          ${campo({ rotulo: 'Responsável', nome: 'responsavelId', tipo: 'select', valor: s?.responsavelId || '', opcoes: [['', 'Sem responsável'], ...usuariosAtivos.map(u => [u.id, u.nome])] })}
+          ${campo({ rotulo: 'Desconto (R$)', nome: 'desconto', valor: numCampo(s?.desconto), attrs: ATTR_DECIMAL })}
+          ${campo({ rotulo: 'Pagamento combinado', nome: 'formaCombinada', valor: s?.formaCombinada || '', placeholder: 'Ex.: 50% de entrada, resto na instalação', classe: 'inteiro' })}
+          ${campo({ rotulo: 'Observações internas', nome: 'obs', tipo: 'textarea', linhas: 2, valor: s?.obs || '', classe: 'inteiro', placeholder: 'Só a equipe vê. Ex.: levar escada grande' })}
+        </div>
+      </details>
     </form>`;
 
   abrirModal({
@@ -842,8 +827,6 @@ export function abrirFormServico(id = null, { clienteId = '' } = {}) {
       const recalcular = () => {
         const t = totaisServico({ itens, maoDeObra: form.maoDeObra.value, desconto: form.desconto.value });
         resumo.innerHTML = `
-          <span>Itens <strong>${moeda(t.somaItens)}</strong></span>
-          <span>Mão de obra <strong>${moeda(t.maoDeObra)}</strong></span>
           ${t.desconto ? `<span>Desconto <strong>− ${moeda(t.desconto)}</strong></span>` : ''}
           <span class="resumo-final">Total <strong>${moeda(t.total)}</strong></span>`;
       };
@@ -883,15 +866,18 @@ export function abrirFormServico(id = null, { clienteId = '' } = {}) {
           const p = buscar('produtos', e.target.value);
           it.produtoId = e.target.value;
           if (p) {
-            if (!it.descricao || (anterior && it.descricao === anterior.nome)) it.descricao = p.nome;
+            it.descricao = p.nome;
             it.preco = p.preco || '';
             it.modo = modoDaUnidade(p.unidade);
+          } else if (anterior && it.descricao === anterior.nome) {
+            it.descricao = '';
           }
         } else {
           it.modo = e.target.value;
         }
         atualizarLinha(i);
-        $(`.item-servico[data-i="${i}"] [data-k="${k === 'produtoId' ? 'descricao' : k}"]`, caixaItens)?.focus();
+        const proximo = k === 'produtoId' ? (it.produtoId ? (it.modo === 'un' ? 'qtd' : 'larg') : 'descricao') : k;
+        $(`.item-servico[data-i="${i}"] [data-k="${proximo}"]`, caixaItens)?.focus();
       });
       caixaItens.addEventListener('click', e => {
         const b = e.target.closest('[data-remover]');
