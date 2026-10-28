@@ -483,15 +483,17 @@ input[type=search]::-webkit-search-cancel-button { cursor: pointer; }
 .ficha-etiquetas { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .ficha-etiquetas .etiqueta { font-size: 12px; padding: 1px 6px; }
 .ficha-cliente { font: 700 16px/1.25 var(--fonte); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ficha-tipo { margin: 0; font-size: 13px; font-weight: 600; color: var(--st-cor); }
+.ficha-tipo { font-weight: 700; color: var(--st-cor); }
 .ficha-desc { margin: 0; color: var(--texto-2); font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.ficha-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 13px; color: var(--texto-3); }
+.ficha-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 6px; font-size: 13px; color: var(--texto-3); }
+.ficha-meta .ficha-valor { margin-left: auto; font-size: 15px; color: var(--texto); }
+.ficha-meta .ficha-valor small { display: inline; }
 .ficha-meta span { display: inline-flex; align-items: center; gap: 4px; }
 .ficha-meta .ico { width: 15px; height: 15px; }
 .ficha-rodape { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--linha); }
 .ficha-valor { display: flex; flex-direction: column; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .ficha-valor small { font-weight: 600; color: var(--alerta); font-size: 12px; }
-.ficha-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.ficha-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--linha); }
 .ficha-acoes .btn { padding: 0 9px; }
 .btn-avancar { border-color: var(--st-cor); color: var(--st-cor); }
 .btn-avancar:hover { background: var(--st-fundo); border-color: var(--st-cor); }
@@ -871,8 +873,8 @@ a.aviso:hover { border-color: var(--linha-forte); }
   display: grid; gap: 8px 10px; align-items: start;
   grid-template-columns: 22px repeat(6, minmax(0, 1fr)) 40px;
   grid-template-areas:
-    "n p p p d d d x"
-    "n m l a q v s s";
+    "n p p d d d m x"
+    "n l a q v s s .";
   padding: 12px; border-radius: var(--raio); background: var(--superficie-2); border: 1px solid var(--linha);
 }
 .item-n { grid-area: n; align-self: start; font-size: 17px; line-height: 1; color: var(--texto-3); padding-top: 4px; }
@@ -891,14 +893,25 @@ a.aviso:hover { border-color: var(--linha-forte); }
 .item-servico input, .item-servico select { min-height: 40px; padding: 8px 10px; }
 .item-servico .dica { font-size: 12px; }
 
+.item-servico.ligado {
+  grid-template-areas:
+    "n p p p p p p x"
+    "n l a q v s s .";
+}
 @media (max-width: 640px) {
   .item-servico {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
       "p p x"
-      "d d d"
-      "m l a"
-      "q v s";
+      "d d m"
+      "l a q"
+      "v s s";
+  }
+  .item-servico.ligado {
+    grid-template-areas:
+      "p p x"
+      "l a q"
+      "v s s";
   }
   .item-n { display: none; }
   .is-remover { justify-self: end; }
@@ -1078,4 +1091,92 @@ a.aviso:hover { border-color: var(--linha-forte); }
 
 @media (max-width: 640px) {
   .doc-previa { padding: 10px; margin-inline: -4px; }
+}
+
+/* --------------------------------------------------------------- versão simplificada */
+
+/* avisos do início em uma linha */
+.pilulas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.pilula {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 14px; border-radius: 18px;
+  background: var(--superficie); border: 1px solid var(--linha);
+  color: var(--texto-2); text-decoration: none; font-size: 14px;
+}
+.pilula strong { color: var(--texto); }
+.pilula .ico { width: 16px; height: 16px; }
+.pilula:hover { border-color: var(--linha-forte); }
+.pilula-perigo { background: var(--perigo-fundo); border-color: var(--perigo-borda); color: var(--perigo); }
+.pilula-alerta { background: var(--alerta-fundo); border-color: var(--alerta-borda); color: var(--alerta); }
+.pilula-perigo strong, .pilula-alerta strong { color: inherit; }
+.tudo-certo { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; color: var(--ok); font-weight: 600; }
+
+/* próximas entregas */
+.lista-entregas { list-style: none; margin: 0; padding: 0; }
+.lista-entregas li + li { border-top: 1px solid var(--linha); }
+.entrega {
+  display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  width: 100%; padding: 12px 4px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.entrega:hover { background: var(--superficie-2); }
+.entrega-quando { font-weight: 700; font-size: 14px; }
+.entrega-quem { display: flex; flex-direction: column; min-width: 0; }
+.entrega-quem strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entrega-quem small { color: var(--texto-3); }
+@media (max-width: 520px) {
+  .entrega { grid-template-columns: 74px minmax(0, 1fr); }
+  .entrega .etiqueta { grid-column: 2; justify-self: start; }
+}
+
+/* campos opcionais recolhidos */
+.mais-opcoes { border-top: 1px solid var(--linha); padding-top: 4px; }
+.mais-opcoes > summary, .det-historico > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 40px;
+  cursor: pointer; font-weight: 600; color: var(--link); list-style: none;
+}
+.mais-opcoes > summary::-webkit-details-marker, .det-historico > summary::-webkit-details-marker { display: none; }
+.mais-opcoes > summary::before, .det-historico > summary::before {
+  content: ''; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s;
+}
+.mais-opcoes[open] > summary::before, .det-historico[open] > summary::before { transform: rotate(45deg); }
+.mais-opcoes > .form-grade { padding: 8px 0 4px; }
+#form-servico .resumo-total { align-self: end; }
+
+/* detalhe da OS */
+.det-estoque { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: 14px; }
+.det-estoque .texto-ok { display: inline-flex; align-items: center; gap: 6px; }
+.det-estoque .ico { width: 16px; height: 16px; }
+.det-historico { border-top: 1px solid var(--linha); padding: 6px 0 10px; }
+.det-historico .nota-form { margin: 8px 0 14px; }
+.det-mais { border-top: 0; padding-top: 4px; }
+.det-acoes-extra { justify-content: flex-start; gap: 20px; }
+.link-suave { color: var(--texto-3); font-weight: 500; }
+.link-perigo { color: var(--perigo); font-weight: 500; }
+
+/* total a receber/pagar dentro das abas do financeiro */
+.aba-n { font-weight: 500; color: var(--texto-3); }
+.aba-n.aba-alerta { color: var(--perigo); font-weight: 700; }
+.t-lanc { --cols: 54px minmax(200px, 2.4fr) minmax(90px, .9fr) 104px 130px 110px; }
+.t-produtos { --cols: minmax(220px, 2.2fr) minmax(170px, 1.5fr) minmax(80px, .7fr) 200px; }
+.rodape-lista .link { display: inline-flex; align-items: center; gap: 4px; }
+
+/* itens cobrados por unidade ou por metro não têm altura/largura: a linha encolhe */
+.item-servico.modo-un { grid-template-areas: "n p p d d d m x" "n q v s s s s ."; }
+.item-servico.ligado.modo-un { grid-template-areas: "n p p p p p p x" "n q v s s s s ."; }
+.item-servico.modo-m { grid-template-areas: "n p p d d d m x" "n l q v s s s ."; }
+.item-servico.ligado.modo-m { grid-template-areas: "n p p p p p p x" "n l q v s s s ."; }
+@media (max-width: 640px) {
+  .item-servico.modo-un { grid-template-areas: "p p x" "d d m" "q v s"; }
+  .item-servico.ligado.modo-un { grid-template-areas: "p p x" "q v s"; }
+  .item-servico.modo-m { grid-template-areas: "p p x" "d d m" "l q v" "s s s"; }
+  .item-servico.ligado.modo-m { grid-template-areas: "p p x" "l q v" "s s s"; }
+  .item-servico .is-produto { grid-column: 1 / 3; }
+}
+
+/* números do início no celular: um por linha, rótulo à esquerda e valor à direita */
+@media (max-width: 560px) {
+  .grade-kpi-3 { grid-template-columns: 1fr; gap: 8px; }
+  .grade-kpi-3 .kpi { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 14px; }
+  .grade-kpi-3 .kpi-valor { font-size: 24px; }
 }
