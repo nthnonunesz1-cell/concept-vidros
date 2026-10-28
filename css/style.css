@@ -84,56 +84,6 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fundo: #07111f;
-    --superficie: #0e1a2c;
-    --superficie-2: #122136;
-    --superficie-3: #1a2c45;
-    --linha: #223652;
-    --linha-forte: #34496a;
-    --texto: #e5eef8;
-    --texto-2: #aebdd0;
-    --texto-3: #8495ac;
-
-    --vidro: #2bc3ec;
-    --vidro-hover: #5ad3f2;
-    --vidro-claro: #0d3046;
-    --vidro-borda: #1d7fa3;
-    --sobre-vidro: #04121f;
-    --link: #5ad3f2;
-    --ciano-texto: #5ad3f2;
-
-    --grafite: #050d18;
-    --grafite-2: #12233b;
-    --grafite-texto: #a9b9cd;
-
-    --ok: #4cc29f;
-    --ok-fundo: #133a31;
-    --alerta: #e6b04f;
-    --alerta-fundo: #36290f;
-    --alerta-borda: #6b5220;
-    --perigo: #f1806e;
-    --perigo-fundo: #3d1b19;
-    --perigo-borda: #74352c;
-
-    --rec: #2fa585;
-    --desp: #e06a4f;
-
-    --st-orcamento: #a6b4c4;  --st-orcamento-f: #1f2b3a;
-    --st-aprovado: #7fb1f2;   --st-aprovado-f: #172943;
-    --st-aguardando: #e6b04f; --st-aguardando-f: #33280f;
-    --st-producao: #b49cf0;   --st-producao-f: #261f3d;
-    --st-pronto: #4cc29f;     --st-pronto-f: #133a31;
-    --st-concluido: #a1b0c2;  --st-concluido-f: #1d2939;
-    --st-cancelado: #f1806e;  --st-cancelado-f: #3d1b19;
-    --st-sobre: #06101c;
-
-    --sombra-modal: 0 20px 60px rgba(0, 0, 0, 0.6);
-    color-scheme: dark;
-  }
-}
-
 /* --------------------------------------------------------------- base */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -1001,13 +951,6 @@ a.aviso:hover { border-color: var(--linha-forte); }
 @media (max-width: 899px) {
   #toasts { bottom: calc(var(--altura-barra) + 14px + env(safe-area-inset-bottom)); }
   body.com-modal #toasts { bottom: calc(80px + env(safe-area-inset-bottom)); }
-}
-@media (prefers-color-scheme: dark) {
-  .toast { background: #f1f5f4; color: #10201c; }
-  .toast .ico { color: var(--ok-fundo); }
-  .toast-erro { background: var(--perigo); color: #1a0705; }
-  .toast-erro .ico { color: #1a0705; }
-  .dica-grafico { background: #f1f5f4; color: #10201c; }
 }
 
 /* --------------------------------------------------------------- tela de entrada */
