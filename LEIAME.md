@@ -94,7 +94,7 @@ Observação: o Firestore libera ou bloqueia o documento inteiro, então um func
 
 - `js/constantes.js`: tipos de serviço, categorias de produto, unidades, categorias de receita e despesa, formas de pagamento e motivos de entrada/saída.
 - `js/config.js`: troque `MEDIDA = "cm"` para `"mm"` se a vidraçaria mede em milímetros.
-- `css/style.css`: as cores da marca ficam no começo do arquivo (`:root`): azul-marinho `#0c1f38` e ciano `#0aa7d7`. O modo escuro segue o do celular/computador.
+- `css/style.css`: as cores da marca ficam no começo do arquivo (`:root`): azul-marinho `#0c1f38` e ciano `#0aa7d7`. O sistema fica sempre com fundo claro, mesmo com o celular no modo escuro.
 - `img/`: a logo em vetor (`logo.svg`), a versão branca para fundo escuro (`logo-negativo.svg`), o símbolo sozinho e as versões PNG. O PDF usa o `img/logo.png`.
 - As fontes (Anton, a mesma letra do nome na logo, e Montserrat) ficam na pasta `fontes/`, então o sistema não depende do Google Fonts e abre igual sem internet.
 - Dados da empresa que saem no orçamento (nome, CNPJ, telefone, PIX, validade, garantia): pela tela **Configurações**.
