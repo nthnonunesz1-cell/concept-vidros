@@ -1,7 +1,7 @@
 // Service worker: deixa o app instalável e abre mesmo sem internet.
 // Estratégia "rede primeiro": sempre tenta baixar a versão nova; se não tiver
 // internet, usa a última cópia guardada. Assim nunca fica preso numa versão velha.
-const CACHE = 'concept-vidros-v2';
+const CACHE = 'concept-vidros-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -23,7 +23,8 @@ self.addEventListener('fetch', e => {
 
   e.respondWith((async () => {
     try {
-      const resp = await fetch(req);
+      // no próprio site, confere com o servidor se o arquivo mudou (não usa cópia velha do navegador)
+      const resp = await fetch(req, mesmoSite ? { cache: 'no-cache' } : undefined);
       if (resp.ok || resp.type === 'opaque') {
         const copia = resp.clone();
         caches.open(CACHE).then(c => c.put(req, copia)).catch(() => {});
