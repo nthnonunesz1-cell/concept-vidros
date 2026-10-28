@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Concept Vidros</title>
+  <meta name="description" content="Sistema de gestão da Concept Vidros: fila de serviços, clientes, estoque e financeiro.">
+  <meta name="theme-color" content="#0c1f38">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Concept Vidros">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icones/icone-192.png">
+  <link rel="apple-touch-icon" href="icones/icone-180.png">
+  <link rel="preload" href="fontes/montserrat-variavel.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fontes/anton-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="tela-entrada">
+      <div class="cartao-entrada cartao-carregando">
+        <div class="marca"><img class="marca-logo" src="img/logo.svg" alt="Concept Vidros"></div>
+        <span class="giro" aria-hidden="true"></span>
+        <p id="msg-inicial">Abrindo…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Área usada só na hora de imprimir orçamento e OS -->
+  <div id="impressao"></div>
+
+  <noscript>
+    <p style="padding:24px">Este sistema precisa do JavaScript ligado no navegador.</p>
+  </noscript>
+
+  <script>
+    // Aberto com dois cliques no arquivo? Módulos JavaScript não funcionam assim.
+    if (location.protocol === 'file:') {
+      document.getElementById('msg-inicial').innerHTML =
+        'Abra o sistema por um servidor, não direto pelo arquivo.<br><br>' +
+        'No VS Code: clique com o botão direito no <b>index.html</b> e escolha <b>Open with Live Server</b>.';
+      document.querySelector('.giro').remove();
+    }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

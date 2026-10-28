@@ -1,0 +1,113 @@
+rules_version = '2';
+
+// =====================================================================
+//  Regras de segurança do Firestore para o sistema da vidraçaria
+//  Cole tudo isto em: Firebase > Firestore Database > Regras > Publicar
+//
+//  Resumo:
+//  - Só entra quem tem perfil em "usuarios" com ativo = true.
+//  - Administrador: pode tudo.
+//  - Funcionário: vê e mexe na fila de serviços e nos clientes, dá entrada
+//    e saída no estoque e registra pagamentos recebidos dos serviços.
+//    Não vê o financeiro, não apaga nada e não mexe na equipe.
+//  - O primeiro a fazer o "primeiro acesso" vira administrador; depois disso
+//    ninguém mais consegue se cadastrar sozinho.
+// =====================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+    function caminhoPerfil() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+    function ativo() {
+      return logado() && exists(caminhoPerfil()) && get(caminhoPerfil()).data.ativo == true;
+    }
+    function admin() {
+      return ativo() && get(caminhoPerfil()).data.papel == 'admin';
+    }
+    function instalado() {
+      return exists(/databases/$(database)/documents/sistema/instalacao);
+    }
+
+    // ---------------------------------------------------------- sistema
+
+    // Marca de que o primeiro acesso já foi feito (a tela de login precisa ler)
+    match /sistema/instalacao {
+      allow read: if true;
+      allow create: if logado() && !instalado()
+        && getAfter(caminhoPerfil()).data.papel == 'admin';
+      allow update, delete: if false;
+    }
+
+    // Dados da empresa que saem no orçamento impresso
+    match /sistema/empresa {
+      allow read: if ativo();
+      allow write: if admin();
+    }
+
+    // Número sequencial das ordens de serviço
+    match /sistema/contador {
+      allow read, write: if ativo();
+    }
+
+    // ---------------------------------------------------------- equipe
+
+    match /usuarios/{uid} {
+      // cada um sempre consegue ler o próprio perfil (para saber se foi desativado)
+      allow read: if ativo() || (logado() && request.auth.uid == uid);
+
+      allow create: if admin()
+        // primeiro acesso: a pessoa cria o próprio perfil de admin junto com a marca de instalação
+        || (logado() && request.auth.uid == uid && !instalado()
+            && existsAfter(/databases/$(database)/documents/sistema/instalacao)
+            && request.resource.data.papel == 'admin'
+            && request.resource.data.ativo == true);
+
+      // o admin não pode tirar o próprio acesso de admin nem se desativar
+      allow update: if admin() && (uid != request.auth.uid
+        || (request.resource.data.papel == 'admin' && request.resource.data.ativo == true));
+
+      allow delete: if admin() && uid != request.auth.uid;
+    }
+
+    // ---------------------------------------------------------- dia a dia
+
+    match /clientes/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if admin();
+    }
+
+    match /servicos/{id} {
+      allow read, create, update: if ativo();
+      allow delete: if admin();
+    }
+
+    match /produtos/{id} {
+      allow read: if ativo();
+      allow create, delete: if admin();
+      // funcionário só pode mudar a quantidade (entrada/saída)
+      allow update: if admin() || (ativo()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantidade', 'atualizadoEm']));
+    }
+
+    match /movimentos/{id} {
+      allow read, create: if ativo();
+      allow update, delete: if admin();
+    }
+
+    // ---------------------------------------------------------- financeiro
+
+    match /lancamentos/{id} {
+      allow read, update, delete: if admin();
+      // funcionário só pode lançar pagamento recebido de um serviço
+      allow create: if admin() || (ativo()
+        && request.resource.data.tipo == 'receita'
+        && request.resource.data.servicoId is string
+        && request.resource.data.servicoId != '');
+    }
+  }
+}
