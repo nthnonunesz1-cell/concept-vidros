@@ -1,2 +1,4 @@
 # concept-vidros
-Endereço antigo do sistema da Concept Vidros: leva pra conceptvidros.github.io
+
+O sistema da Concept Vidros mudou para https://conceptvidros.github.io/ (repositório conceptvidros/conceptvidros.github.io).
+Esta página só leva o endereço antigo para o novo.

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Concept Vidros mudou de endereço</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0c1f38">
+  <script>
+    // O sistema da Concept Vidros mudou para https://conceptvidros.github.io/
+    // Esta página leva para lá, mantendo o ?demo e a tela aberta (#servicos, #avisos...).
+    (async () => {
+      try {
+        const regs = await (navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations() : []);
+        await Promise.all(regs.map(r => r.unregister()));
+      } catch (e) { /* segue */ }
+      location.replace('https://conceptvidros.github.io/' + location.search + location.hash);
+    })();
+  </script>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      background: #0c1f38; color: #f1f5f4; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; text-align: center; }
+    a { color: #8fe7f3; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <p>O sistema da Concept Vidros mudou de endereço.<br>
+    <a href="https://conceptvidros.github.io/">Abrir conceptvidros.github.io</a></p>
+</body>
+</html>
