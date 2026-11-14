@@ -7,14 +7,14 @@
   <meta name="robots" content="noindex">
   <meta name="theme-color" content="#0c1f38">
   <script>
-    // O sistema da Concept Vidros mudou para https://conceptvidros.github.io/
+    // O sistema da Concept Vidros mudou para https://concept-vidros.web.app/
     // Esta página leva para lá, mantendo o ?demo e a tela aberta (#servicos, #avisos...).
     (async () => {
       try {
         const regs = await (navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations() : []);
         await Promise.all(regs.map(r => r.unregister()));
       } catch (e) { /* segue */ }
-      location.replace('https://conceptvidros.github.io/' + location.search + location.hash);
+      location.replace('https://concept-vidros.web.app/' + location.search + location.hash);
     })();
   </script>
   <style>
@@ -25,6 +25,6 @@
 </head>
 <body>
   <p>O sistema da Concept Vidros mudou de endereço.<br>
-    <a href="https://conceptvidros.github.io/">Abrir conceptvidros.github.io</a></p>
+    <a href="https://concept-vidros.web.app/">Abrir concept-vidros.web.app</a></p>
 </body>
 </html>
